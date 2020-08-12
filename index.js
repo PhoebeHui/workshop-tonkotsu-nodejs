@@ -26,7 +26,7 @@ server(
   { log: "debug", env: "development" },
   get("/", [
     getZenQuote,
-async ctx => {
+ ctx => {
       return render("index.pug", { zen: ctx.zen });
     }
   ]),
