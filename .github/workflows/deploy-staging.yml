@@ -1,77 +1,43 @@
-name: Stage the app
-
-on: 
+name: Node.js
+on:
+  push:
+    branches: [ master ]
   pull_request:
-    types: [labeled]
+    branches: [ master ]
 
-env:
-  DOCKER_IMAGE_NAME: GitHubMyWebApp
-  IMAGE_REGISTRY_URL: docker.pkg.github.com
-  #################################################
-  ### USER PROVIDED VALUES ARE REQUIRED BELOW   ###
-  #################################################
-  #################################################
-  ### REPLACE USERNAME WITH GH USERNAME         ###
-  AZURE_WEBAPP_NAME: GitHubMyWebApp
-  #################################################
-  
+ 
+
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    if: contains(github.event.pull_request.labels.*.name, 'stage')
     steps:
-      - uses: actions/checkout@v1
-      - name: npm install and build webpack
-        run: |
-          npm install
-          npm run build
-      - uses: actions/upload-artifact@master
-        with:
-          name: webpack artifacts
-          path: lib/
+    # checkout the repo
+    - name: 'Checkout GitHub Action' 
+      uses: actions/checkout@master
+   
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Setup Node 10.x
+      uses: actions/setup-node@v1
+      with:
+        node-version: '10.x'
+    
+    - name: 'npm install, build, and test'
+      run: |
+        npm install
+        npm run build --if-present
+        npm run test --if-present
+               
+    # deploy web app using Azure credentials
+    - uses: azure/webapps-deploy@v2
+      with:
+        app-name: 'GitHubMyWebApp'
 
-  Build-Docker-Image:
-    runs-on: ubuntu-latest
-    needs: build
-    name: Build image and store in GitHub Packages
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v1
+ 
 
-      - name: Download built artifact
-        uses: actions/download-artifact@master
-        with:
-          name: webpack artifacts
-          path: lib
-
-      - name: create image and store in Packages
-        uses: mattdavis0351/actions/docker-gpr@1.3.0
-        with:
-          repo-token: ${{secrets.GITHUB_TOKEN}}
-          image-name: ${{env.DOCKER_IMAGE_NAME}}
-
-  Deploy-to-Azure:
-    runs-on: ubuntu-latest
-    needs: Build-Docker-Image
-    name: Deploy app container to Azure
-    steps:
-      - name: "Login via Azure CLI"
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - uses: azure/docker-login@v1
-        with:
-          login-server: ${{env.IMAGE_REGISTRY_URL}}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Deploy web app container
-        uses: azure/webapps-deploy@v2
-        with:
-          app-name: ${{env.AZURE_WEBAPP_NAME}}
-          images: ${{env.IMAGE_REGISTRY_URL}}/${{ github.repository }}/${{env.DOCKER_IMAGE_NAME}}:${{ github.sha }}
-
-      - name: Azure logout
-        run: |
-          az logout
+    # Azure logout 
+    - name: logout
+      run: |
+        az logout
